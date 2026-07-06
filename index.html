@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KasirDiSiniAja - Sistem POS Kasir Sederhana</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f8f9fa;
+        }
+        .pos-container {
+            margin-top: 30px;
+        }
+        .cart-card {
+            min-height: 400px;
+        }
+    </style>
+</head>
+<body>
+
+<nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+    <div class="container">
+        <a class="navbar-brand fw-bold" href="#">🛒 KasirDiSiniAja</a>
+        <span class="navbar-text text-white">
+            Sistem Kasir POS VPS Edra
+        </span>
+    </div>
+</nav>
+
+<div class="container pos-container">
+    <div class="row">
+        <!-- Input & Produk -->
+        <div class="col-md-7">
+            <div class="card mb-4 shadow-sm">
+                <div class="card-header bg-dark text-white fw-bold">Tambah Barang / Produk</div>
+                <div class="card-body">
+                    <form id="product-form" class="row g-3">
+                        <div class="col-md-6">
+                            <label for="prod-name" class="form-label">Nama Barang</label>
+                            <input type="text" class="form-control" id="prod-name" placeholder="Misal: Kopi Hitam" required>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="prod-price" class="form-label">Harga (Rp)</label>
+                            <input type="number" class="form-control" id="prod-price" min="0" placeholder="15000" required>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="prod-qty" class="form-label">Jumlah</label>
+                            <input type="number" class="form-control" id="prod-qty" min="1" value="1" required>
+                        </div>
+                        <div class="col-12 text-end">
+                            <button type="submit" class="btn btn-success fw-bold">+ Masukkan Keranjang</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- List Cepat Produk (Dummy) -->
+            <div class="card shadow-sm">
+                <div class="card-header bg-secondary text-white fw-bold">Produk Cepat</div>
+                <div class="card-body">
+                    <div class="d-flex flex-wrap gap-2">
+                        <button class="btn btn-outline-primary" onclick="quickAdd('Indomie Goreng', 3500)">🍜 Indomie (Rp 3.500)</button>
+                        <button class="btn btn-outline-primary" onclick="quickAdd('Es Teh Manis', 5000)">🍹 Es Teh (Rp 5.000)</button>
+                        <button class="btn btn-outline-primary" onclick="quickAdd('Roti Bakar', 12000)">🍞 Roti Bakar (Rp 12.000)</button>
+                        <button class="btn btn-outline-primary" onclick="quickAdd('Kopi Susu', 8000)">☕ Kopi Susu (Rp 8.000)</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Keranjang & Checkout -->
+        <div class="col-md-5">
+            <div class="card cart-card shadow-sm d-flex flex-column">
+                <div class="card-header bg-primary text-white fw-bold d-flex justify-content-between align-items-center">
+                    <span>🛒 Detail Transaksi</span>
+                    <button class="btn btn-sm btn-danger fw-bold" onclick="clearCart()">Kosongkan</button>
+                </div>
+                <div class="card-body flex-grow-1" style="overflow-y: auto;">
+                    <table class="table table-striped" id="cart-table">
+                        <thead>
+                            <tr>
+                                <th>Barang</th>
+                                <th>Qty</th>
+                                <th>Harga</th>
+                                <th>Total</th>
+                            </tr>
+                        </thead>
+                        <tbody id="cart-items">
+                            <!-- Items go here -->
+                        </tbody>
+                    </table>
+                </div>
+                <div class="card-footer bg-light">
+                    <div class="d-flex justify-content-between fw-bold fs-4 mb-3">
+                        <span>Total:</span>
+                        <span id="cart-total" class="text-primary">Rp 0</span>
+                    </div>
+                    <div class="row g-2">
+                        <div class="col-6">
+                            <input type="number" class="form-control" id="cash-amount" placeholder="Jumlah Bayar" oninput="calcChange()">
+                        </div>
+                        <div class="col-6">
+                            <div class="form-control bg-light text-muted" id="change-amount">Kembalian: Rp 0</div>
+                        </div>
+                    </div>
+                    <button class="btn btn-primary w-100 mt-3 fw-bold fs-5" onclick="checkout()">CETAK STRUK / SELESAI</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let cart = [];
+
+    document.getElementById('product-form').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const name = document.getElementById('prod-name').value;
+        const price = parseInt(document.getElementById('prod-price').value);
+        const qty = parseInt(document.getElementById('prod-qty').value);
+        
+        addToCart(name, price, qty);
+        this.reset();
+        document.getElementById('prod-qty').value = 1;
+    });
+
+    function quickAdd(name, price) {
+        addToCart(name, price, 1);
+    }
+
+    function addToCart(name, price, qty) {
+        const existing = cart.find(item => item.name === name);
+        if (existing) {
+            existing.qty += qty;
+        } else {
+            cart.push({ name, price, qty });
+        }
+        updateCart();
+    }
+
+    function clearCart() {
+        cart = [];
+        updateCart();
+    }
+
+    function updateCart() {
+        const tbody = document.getElementById('cart-items');
+        tbody.innerHTML = '';
+        let total = 0;
+
+        cart.forEach((item, index) => {
+            const itemTotal = item.price * item.qty;
+            total += itemTotal;
+            tbody.innerHTML += `
+                <tr>
+                    <td>${item.name}</td>
+                    <td>${item.qty}</td>
+                    <td>Rp ${item.price.toLocaleString('id-ID')}</td>
+                    <td>Rp ${itemTotal.toLocaleString('id-ID')}</td>
+                </tr>
+            `;
+        });
+
+        document.getElementById('cart-total').innerText = 'Rp ' + total.toLocaleString('id-ID');
+        calcChange();
+    }
+
+    function calcChange() {
+        const total = cart.reduce((sum, item) => sum + (item.price * item.qty), 0);
+        const cash = parseInt(document.getElementById('cash-amount').value) || 0;
+        const change = cash - total;
+        
+        if (change >= 0) {
+            document.getElementById('change-amount').innerText = 'Kembalian: Rp ' + change.toLocaleString('id-ID');
+            document.getElementById('change-amount').className = "form-control bg-success text-white fw-bold";
+        } else {
+            document.getElementById('change-amount').innerText = 'Kurang: Rp ' + Math.abs(change).toLocaleString('id-ID');
+            document.getElementById('change-amount').className = "form-control bg-danger text-white fw-bold";
+        }
+    }
+
+    function checkout() {
+        if (cart.length === 0) {
+            alert('Keranjang masih kosong!');
+            return;
+        }
+        alert('Transaksi Berhasil! Silakan cetak struk belanja.');
+        clearCart();
+        document.getElementById('cash-amount').value = '';
+    }
+</script>
+
+</body>
+</html>
