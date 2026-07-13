@@ -9,21 +9,29 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    let cancelled = false;
     try {
       const saved = localStorage.getItem(SESSION_KEY);
       if (!saved) { setLoading(false); return; }
       const session = JSON.parse(saved);
       if (!session.token || !session.user) { localStorage.removeItem(SESSION_KEY); setLoading(false); return; }
       if (session.expiresAt && Date.now() > session.expiresAt) { localStorage.removeItem(SESSION_KEY); setLoading(false); return; }
+      // Set from cache first so UI renders immediately
       setUser(session.user);
       setToken(session.token);
-      // Validate token against backend; refresh user role
+      setLoading(false);
+      // Validate in background; if invalid, logout silently
       fetch('/api/auth/me', { headers: { Authorization: `Bearer ${session.token}` } })
-        .then(r => r.ok ? r.json() : Promise.reject())
-        .then(u => { if (cancelled) return; const updated = { ...session.user, ...u }; setUser(updated); localStorage.setItem(SESSION_KEY, JSON.stringify({ ...session, user: updated })); })
-        .catch(() => { if (!cancelled) { localStorage.removeItem(SESSION_KEY); setUser(null); setToken(null); } })
-        .finally(() => { if (!cancelled) setLoading(false); });
+        .then(r => { if (!r.ok) throw new Error(); return r.json(); })
+        .then(u => {
+          const updated = { ...session.user, ...u };
+          setUser(updated);
+          localStorage.setItem(SESSION_KEY, JSON.stringify({ ...session, user: updated }));
+        })
+        .catch(() => {
+          localStorage.removeItem(SESSION_KEY);
+          setUser(null);
+          setToken(null);
+        });
     } catch { localStorage.removeItem(SESSION_KEY); setLoading(false); }
   }, []);
 
@@ -57,8 +65,8 @@ export function AuthProvider({ children }) {
   };
 
   if (loading) return (
-    <div className="min-h-screen bg-[#0f172a] flex items-center justify-center">
-      <div className="w-10 h-10 border-2 border-[#3b82f6]/20 border-t-[#3b82f6] rounded-full animate-spin" />
+    <div className="min-h-screen bg-[#f5f7fa] flex items-center justify-center">
+      <div className="w-10 h-10 border-2 border-[#2563eb]/20 border-t-[#2563eb] rounded-full animate-spin" />
     </div>
   );
 
