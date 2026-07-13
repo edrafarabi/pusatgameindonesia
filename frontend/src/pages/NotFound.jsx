@@ -1,21 +1,15 @@
 import { Link } from 'react-router-dom';
+import { ArrowLeft } from 'lucide-react';
 
 export default function NotFound() {
   return (
-    <div className="bg-[#f5f6f9] min-h-[calc(100vh-100px)] flex flex-col items-center justify-center py-10 px-4 text-center pb-20">
-      <div className="max-w-md w-full space-y-4">
-        <h1 className="text-6xl font-black text-[#0070f0]">404</h1>
-        <h2 className="text-xl font-bold text-gray-800">Halaman Tidak Ditemukan</h2>
-        <p className="text-xs text-gray-500 max-w-xs mx-auto leading-relaxed">
-          Maaf, halaman yang kamu cari tidak dapat ditemukan atau telah dipindahkan.
-        </p>
-        <Link
-          to="/"
-          className="inline-block bg-[#0070f0] hover:bg-[#005ec8] text-white font-bold text-xs px-6 py-2.5 rounded transition-colors shadow-sm"
-        >
-          Kembali ke Beranda
-        </Link>
-      </div>
+    <div className="min-h-screen bg-[#0f172a] text-[#f8fafc] flex flex-col items-center justify-center px-4 py-10 text-center">
+      <h1 className="text-7xl font-black text-[#3b82f6]/20 mb-4">404</h1>
+      <h2 className="text-lg font-bold mb-1">Halaman Tidak Ditemukan</h2>
+      <p className="text-[13px] text-[#94a3b8] max-w-xs mx-auto leading-relaxed mb-6">Halaman yang kamu cari tidak ada atau telah dipindahkan.</p>
+      <Link to="/" className="inline-flex items-center gap-2 bg-[#3b82f6] hover:bg-[#2563eb] text-white font-bold text-[14px] px-6 py-2.5 rounded-xl transition-all">
+        <ArrowLeft size={16} /> Kembali
+      </Link>
     </div>
   );
 }

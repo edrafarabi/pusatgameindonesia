@@ -3,10 +3,18 @@ const router = express.Router();
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const jwt = require('jsonwebtoken');
+const bcrypt = require('bcrypt');
+
+
 
 const dbPath = path.join(__dirname, 'database.sqlite');
-const db = new sqlite3.Database(dbPath);
-const JWT_SECRET = process.env.JWT_SECRET || 'edra_pusatgame_super_secret_key_12345';
+const db = new sqlite3.Database(dbPath, (err) => {
+    if (!err) {
+        db.run('PRAGMA journal_mode = WAL;');
+    }
+});
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) { console.error('FATAL: JWT_SECRET missing'); process.exit(1); }
 
 // Middleware: Admin Only
 const adminOnly = (req, res, next) => {
@@ -32,17 +40,20 @@ router.get('/dashboard', adminOnly, (req, res) => {
 
     db.get('SELECT COUNT(*) as count FROM users', (err, row) => {
         stats.totalUsers = row ? row.count : 0;
-        db.get('SELECT COUNT(*) as count FROM products WHERE status = "ACTIVE"', (err2, row2) => {
-            stats.totalListings = row2 ? row2.count : 0;
-            db.get('SELECT COUNT(*) as count FROM transactions', (err3, row3) => {
-                stats.totalTransactions = row3 ? row3.count : 0;
-                db.get('SELECT COUNT(*) as count FROM transactions WHERE status = "COMPLETED"', (err4, row4) => {
-                    stats.completedTransactions = row4 ? row4.count : 0;
-                    db.get('SELECT COALESCE(SUM(amount), 0) as total FROM transactions WHERE status = "COMPLETED"', (err5, row5) => {
-                        stats.totalRevenue = row5 ? row5.total : 0;
-                        db.get('SELECT COUNT(*) as count FROM transactions WHERE status = "WAITING_PAYMENT"', (err6, row6) => {
-                            stats.pendingTransactions = row6 ? row6.count : 0;
-                            res.json(stats);
+        db.get('SELECT COUNT(*) as count FROM users WHERE role IN ("ADMIN", "SUPERADMIN")', (errAdmin, rowAdmin) => {
+            stats.totalAdmins = rowAdmin ? rowAdmin.count : 0;
+            db.get('SELECT COUNT(*) as count FROM products WHERE status = "ACTIVE"', (err2, row2) => {
+                stats.totalListings = row2 ? row2.count : 0;
+                db.get('SELECT COUNT(*) as count FROM transactions', (err3, row3) => {
+                    stats.totalTransactions = row3 ? row3.count : 0;
+                    db.get('SELECT COUNT(*) as count FROM transactions WHERE status = "COMPLETED"', (err4, row4) => {
+                        stats.completedTransactions = row4 ? row4.count : 0;
+                        db.get('SELECT COALESCE(SUM(amount), 0) as total FROM transactions WHERE status = "COMPLETED"', (err5, row5) => {
+                            stats.totalRevenue = row5 ? row5.total : 0;
+                            db.get('SELECT COUNT(*) as count FROM transactions WHERE status = "WAITING_PAYMENT"', (err6, row6) => {
+                                stats.pendingTransactions = row6 ? row6.count : 0;
+                                res.json(stats);
+                            });
                         });
                     });
                 });
@@ -93,19 +104,28 @@ router.get('/users', adminOnly, (req, res) => {
 router.put('/users/:id', adminOnly, (req, res) => {
     const { name, email, role, password } = req.body;
     if (name && email) {
-        let query = 'UPDATE users SET name = ?, email = ?, role = ?';
-        let params = [name, email, role || 'BUYER'];
+        const doUpdate = (hashedPw) => {
+            let query = 'UPDATE users SET name = ?, email = ?, role = ?';
+            let params = [name, email, role || 'BUYER'];
+            if (hashedPw) {
+                query += ', password = ?';
+                params.push(hashedPw);
+            }
+            query += ' WHERE id = ?';
+            params.push(req.params.id);
+            db.run(query, params, function(err) {
+                if (err) return res.status(500).json({ error: 'Gagal update user' });
+                res.json({ message: 'User berhasil diupdate' });
+            });
+        };
         if (password) {
-            query += ', password = ?';
-            params.push(password);
+            bcrypt.hash(password, 10, (hErr, hash) => {
+                if (hErr) return res.status(500).json({ error: 'Gagal hash password' });
+                doUpdate(hash);
+            });
+        } else {
+            doUpdate(null);
         }
-        query += ' WHERE id = ?';
-        params.push(req.params.id);
-
-        db.run(query, params, function(err) {
-            if (err) return res.status(400).json({ error: 'Gagal update user' });
-            res.json({ success: true, message: 'User berhasil diupdate' });
-        });
     } else {
         res.status(400).json({ error: 'Name dan email wajib diisi' });
     }

@@ -1,44 +1,30 @@
 import { useState } from 'react';
-import { useNavigate, Link, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Mail, Lock, Eye, EyeOff } from 'lucide-react';
+import { useNavigate, Link } from 'react-router-dom';
+import { Eye, EyeOff, ArrowRight, LogIn } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export default function Login() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const { login, isAdmin } = useAuth();
-  const [formData, setFormData] = useState({ email: '', password: '' });
-  const [showPassword, setShowPassword] = useState(false);
+  const { login } = useAuth();
+  const [form, setForm] = useState({ email: '', password: '' });
+  const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const handleSubmit = async (e) => {
+  const submit = async (e) => {
     e.preventDefault();
-    setLoading(true);
     setError('');
-
+    setLoading(true);
     try {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(form),
       });
       const data = await res.json();
-
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Login gagal');
-      }
-
-      // Simpan auth ke context + localStorage
+      if (!res.ok) throw new Error(data.error || 'Login gagal');
       login(data.user, data.token);
-
-      // Redirect: admin ke /admin, user biasa ke / atau redirect param
-      const redirect = searchParams.get('redirect');
-      if (data.user.role === 'ADMIN' || data.user.role === 'SUPERADMIN') {
-        navigate(redirect || '/admin');
-      } else {
-        navigate(redirect || '/');
-      }
+      navigate('/produk', { replace: true });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -47,84 +33,80 @@ export default function Login() {
   };
 
   return (
-    <div className="bg-[#f5f6f9] min-h-[calc(100vh-100px)] flex flex-col justify-center py-10 px-4 pb-20">
-      <div className="max-w-md w-full mx-auto bg-white rounded-lg p-6 border border-gray-200 shadow-sm space-y-6">
-        
-        {/* Title */}
-        <div className="text-center">
-          <h2 className="text-2xl font-black text-gray-800">Selamat Datang Kembali</h2>
-          <p className="text-xs text-gray-500 mt-1">Masuk ke akun PusatGame kamu</p>
+    <div className="min-h-screen bg-[#0f172a] flex items-center justify-center px-4">
+      <div className="w-full max-w-[400px]">
+        {/* Logo + Title */}
+        <div className="text-center mb-8">
+          <div className="w-16 h-16 mx-auto mb-5 rounded-2xl overflow-hidden shadow-lg shadow-blue-500/10 ring-1 ring-[#475569] bg-[#1e293b]">
+            <img src="/logo.jpg" alt="" className="w-full h-full object-cover" />
+          </div>
+          <h1 className="text-[22px] font-semibold tracking-tight text-[#f8fafc]">
+            Selamat datang
+          </h1>
+          <p className="text-[13px] text-[#94a3b8] mt-1">Masuk untuk mulai jual beli akun game</p>
         </div>
 
-        {error && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-            <p className="text-sm text-red-600">❌ {error}</p>
-          </div>
-        )}
+        {/* Form Card */}
+        <div className="bg-[#1e293b] rounded-2xl p-6 shadow-xl shadow-black/20 ring-1 ring-[#475569]">
+          {error && (
+            <div className="flex items-center gap-2.5 bg-red-500/10 rounded-xl px-4 py-3 mb-5 ring-1 ring-red-500/20">
+              <p className="text-[12px] text-red-400 font-medium flex-1">{error}</p>
+            </div>
+          )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-xs font-bold text-gray-700 mb-1.5">Email</label>
-            <div className="relative">
-              <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400 pointer-events-none">
-                <Mail size={16} />
-              </span>
+          <form onSubmit={submit} className="space-y-4">
+            <div>
+              <label className="block text-[12px] font-medium text-[#94a3b8] mb-1.5">Email</label>
               <input
                 type="email"
-                value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                placeholder="Contoh: user@email.com"
-                className="w-full border border-gray-300 rounded pl-10 pr-3 py-2 text-xs focus:ring-1 focus:ring-[#0070f0] outline-none"
+                value={form.email}
+                onChange={e => setForm({ ...form, email: e.target.value })}
+                placeholder="kamu@email.com"
+                className="w-full rounded-xl border border-[#475569] bg-[#0f172a] px-4 py-3 text-[14px] text-[#f8fafc] placeholder:text-[#64748b] outline-none focus:border-[#3b82f6] focus:ring-2 focus:ring-[#3b82f6]/20 transition"
                 required
               />
             </div>
-          </div>
 
-          <div>
-            <label className="block text-xs font-bold text-gray-700 mb-1.5">Password</label>
-            <div className="relative">
-              <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400 pointer-events-none">
-                <Lock size={16} />
-              </span>
-              <input
-                type={showPassword ? 'text' : 'password'}
-                value={formData.password}
-                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                placeholder="Masukkan password"
-                className="w-full border border-gray-300 rounded pl-10 pr-10 py-2 text-xs focus:ring-1 focus:ring-[#0070f0] outline-none"
-                required
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
-              >
-                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-              </button>
+            <div>
+              <label className="block text-[12px] font-medium text-[#94a3b8] mb-1.5">Password</label>
+              <div className="relative">
+                <input
+                  type={showPw ? 'text' : 'password'}
+                  value={form.password}
+                  onChange={e => setForm({ ...form, password: e.target.value })}
+                  placeholder="Masukkan password"
+                  className="w-full rounded-xl border border-[#475569] bg-[#0f172a] px-4 py-3 pr-11 text-[14px] text-[#f8fafc] placeholder:text-[#64748b] outline-none focus:border-[#3b82f6] focus:ring-2 focus:ring-[#3b82f6]/20 transition"
+                  required
+                />
+                <button type="button" onClick={() => setShowPw(!showPw)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-[#94a3b8] hover:text-[#f8fafc] transition-colors">
+                  {showPw ? <EyeOff size={17} /> : <Eye size={17} />}
+                </button>
+              </div>
             </div>
-          </div>
 
-          <div className="flex items-center justify-between text-xs">
-            <label className="flex items-center gap-1.5 text-gray-600">
-              <input type="checkbox" className="rounded text-[#0070f0]" />
-              Ingat Saya
-            </label>
-            <Link to="/" className="text-[#0070f0] hover:underline font-semibold">Lupa Password?</Link>
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-[#0070f0] hover:bg-[#005ec8] disabled:bg-gray-400 text-white font-bold text-xs py-3 rounded transition-colors shadow-sm cursor-pointer"
-          >
-            {loading ? '⏳ Masuk...' : '🚀 Masuk ke Akun'}
-          </button>
-        </form>
-
-        <div className="text-center text-xs text-gray-600">
-          Belum punya akun?{' '}
-          <Link to="/register" className="text-[#0070f0] hover:underline font-bold">Daftar Sekarang</Link>
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full rounded-xl bg-[#3b82f6] hover:bg-[#2563eb] disabled:opacity-60 text-white font-semibold text-[14px] py-3.5 flex items-center justify-center gap-2 transition-all shadow-lg shadow-blue-500/25 active:scale-[0.98]"
+            >
+              {loading ? (
+                <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+              ) : (
+                <>Masuk <ArrowRight size={16} /></>
+              )}
+            </button>
+          </form>
         </div>
+
+        {/* Register link */}
+        <p className="text-center text-[13px] text-[#94a3b8] mt-6">
+          Baru di PusatGame?{' '}
+          <Link to="/register" className="text-[#3b82f6] font-semibold hover:text-[#2563eb] transition-colors">Buat akun</Link>
+        </p>
       </div>
     </div>
   );

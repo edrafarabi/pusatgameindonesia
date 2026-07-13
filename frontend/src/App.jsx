@@ -2,12 +2,16 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import Layout from './components/Layout';
 import AdminLayout from './components/AdminLayout';
-import Home from './pages/Home';
 import ProdukPage from './pages/ProdukPage';
 import ProductDetail from './pages/ProductDetail';
 import SellAccount from './pages/SellAccount';
 import RekberPage from './pages/RekberPage';
+import Akun from './pages/Akun';
 import ChatRoom from './pages/ChatRoom';
+import ChatList from './pages/ChatList';
+import SellerDashboard from './pages/SellerDashboard';
+import RiwayatPage from './pages/RiwayatPage';
+import Checkout from './pages/Checkout';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import NotFound from './pages/NotFound';
@@ -21,17 +25,51 @@ function App() {
   return (
     <AuthProvider>
       <Routes>
-        {/* Public Routes */}
+        {/* Market is the entry page */}
         <Route path="/" element={<Layout />}>
-          <Route index element={<Home />} />
-          <Route path="produk" element={<ProdukPage />} />
-          <Route path="product/:id" element={<ProductDetail />} />
-          <Route path="jual" element={<SellAccount />} />
-          <Route path="rekber" element={<RekberPage />} />
-          <Route path="room/:id" element={<ChatRoom />} />
-          <Route path="login" element={<Login />} />
-          <Route path="register" element={<Register />} />
-          <Route path="404" element={<NotFound />} />
+          <Route index element={<ProdukPage />} />
+        </Route>
+        <Route path="/produk" element={<Layout />}>
+          <Route index element={<ProdukPage />} />
+        </Route>
+        <Route path="/product/:id" element={<Layout />}>
+          <Route index element={<ProductDetail />} />
+        </Route>
+        <Route path="/jual" element={<Layout />}>
+          <Route index element={<SellAccount />} />
+        </Route>
+        <Route path="/rekber" element={<Layout />}>
+          <Route index element={<RekberPage />} />
+        </Route>
+        <Route path="/akun" element={<Layout />}>
+          <Route index element={<Akun />} />
+        </Route>
+        <Route path="/seller" element={<Layout />}>
+          <Route index element={<SellerDashboard />} />
+        </Route>
+        <Route path="/checkout/:id" element={<Layout />}>
+          <Route index element={<Checkout />} />
+        </Route>
+        <Route path="/chats" element={<Layout />}>
+          <Route index element={<ChatList />} />
+        </Route>
+        <Route path="/riwayat" element={<Layout />}>
+          <Route index element={<RiwayatPage />} />
+        </Route>
+        <Route path="/chat/:transactionId" element={<Layout />}>
+          <Route index element={<ChatRoom />} />
+        </Route>
+        <Route path="/room/:id" element={<Layout />}>
+          <Route index element={<ChatRoom />} />
+        </Route>
+        <Route path="/login" element={<Layout />}>
+          <Route index element={<Login />} />
+        </Route>
+        <Route path="/register" element={<Layout />}>
+          <Route index element={<Register />} />
+        </Route>
+        <Route path="/404" element={<Layout />}>
+          <Route index element={<NotFound />} />
         </Route>
 
         {/* Admin Routes */}

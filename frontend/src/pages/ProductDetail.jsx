@@ -1,29 +1,34 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { Star, Heart, Share2, MessageCircle, ShieldCheck, ChevronLeft, User, Package, Tag } from 'lucide-react';
+import { Star, Heart, Share2, MessageCircle, ShieldCheck, ChevronLeft, Package, Tag, Truck, Clock, ArrowRight, Gamepad2, AlertCircle, User } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 const CATEGORY_MAP = { AKUN_GAME: 'Akun Game', ITEM_GAME: 'Item Game', VOUCHER: 'Voucher', JASA_JOKI: 'Jasa Joki' };
 
-const GAME_THEMES = {
-  'Mobile Legends': { accent: 'from-cyan-500 to-blue-600', icon: '⚔️' },
-  'Genshin Impact': { accent: 'from-yellow-500 to-orange-600', icon: '🌟' },
-  'Free Fire': { accent: 'from-red-500 to-orange-500', icon: '🔥' },
-  'PUBG Mobile': { accent: 'from-orange-600 to-yellow-500', icon: '🎯' },
-  'Valorant': { accent: 'from-red-600 to-pink-500', icon: '🔫' },
-  'PlayStation': { accent: 'from-indigo-600 to-blue-500', icon: '🎮' },
-  'Steam': { accent: 'from-gray-600 to-gray-400', icon: '🖥️' },
-  'Google Play': { accent: 'from-green-500 to-emerald-600', icon: '▶️' },
-};
-function getTheme(name) {
-  return GAME_THEMES[name] || { accent: 'from-blue-500 to-purple-600', icon: '🎮' };
+/* Skeleton */
+function Skeleton({ className = '' }) {
+  return <div className={`bg-[#334155] rounded-xl animate-pulse ${className}`} />;
+}
+
+/* Toast */
+function Toast({ message, type = 'success', onClose }) {
+  useEffect(() => { const t = setTimeout(onClose, 2500); return () => clearTimeout(t); }, [onClose]);
+  const colors = { success: 'bg-[#3b82f6] text-white border-[#60a5fa]', error: 'bg-red-500/90 text-white border-red-400/30' };
+  return (
+    <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-xl border text-[13px] font-medium shadow-lg backdrop-blur-sm ${colors[type]} animate-[slideDown_.25s_ease]`}>
+      {message}
+    </div>
+  );
 }
 
 export default function ProductDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
   const [liked, setLiked] = useState(false);
+  const [toast, setToast] = useState(null);
 
   useEffect(() => {
     fetch(`/api/products/${id}`)
@@ -32,201 +37,291 @@ export default function ProductDetail() {
       .catch(() => setLoading(false));
   }, [id]);
 
+  const handleBuy = () => {
+    if (!user) {
+      navigate(`/login?redirect=/product/${id}`);
+      return;
+    }
+    navigate(`/checkout/${id}`);
+  };
+
+  const handleShare = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      setToast({ message: 'Link disalin!', type: 'success' });
+    } catch {
+      setToast({ message: 'Gagal menyalin link', type: 'error' });
+    }
+  };
+
+  /* Loading skeleton */
   if (loading) return (
-    <div className="animate-pulse space-y-4 py-8">
-      <div className="h-6 skeleton-pulse rounded w-1/4" />
-      <div className="grid md:grid-cols-12 gap-6">
-        <div className="md:col-span-5 aspect-[4/3] skeleton-pulse rounded-2xl" />
-        <div className="md:col-span-7 space-y-4">
-          <div className="h-8 skeleton-pulse rounded w-2/3" />
-          <div className="h-6 skeleton-pulse rounded w-1/3" />
-          <div className="h-20 skeleton-pulse rounded" />
+    <div className="min-h-screen bg-[#0f172a]">
+      <div className="bg-[#1e293b]/80 backdrop-blur-lg border-b border-[#475569] px-4 py-3 flex items-center gap-3 sticky top-0 z-10">
+        <Skeleton className="w-7 h-7 rounded-lg" />
+        <Skeleton className="h-4 w-32" />
+      </div>
+      <div className="max-w-5xl mx-auto px-4 py-5 space-y-4">
+        <div className="flex items-center gap-2">
+          <Skeleton className="h-3 w-16" />
+          <Skeleton className="h-3 w-20" />
+          <Skeleton className="h-3 w-24" />
+        </div>
+        <div className="grid md:grid-cols-12 gap-4">
+          <div className="md:col-span-5">
+            <Skeleton className="aspect-[4/3] rounded-2xl" />
+          </div>
+          <div className="md:col-span-4 space-y-3">
+            <div className="bg-[#1e293b]/60 backdrop-blur-xl border border-white/10 rounded-2xl p-4 space-y-3">
+              <Skeleton className="h-3 w-24" />
+              <Skeleton className="h-5 w-full" />
+              <Skeleton className="h-6 w-32" />
+              <Skeleton className="h-3 w-40" />
+            </div>
+            <div className="bg-[#1e293b]/60 backdrop-blur-xl border border-white/10 rounded-2xl p-4 space-y-3">
+              <Skeleton className="h-3 w-16" />
+              <div className="flex gap-3 items-center">
+                <Skeleton className="w-10 h-10 rounded-full" />
+                <div className="space-y-1.5 flex-1">
+                  <Skeleton className="h-3.5 w-24" />
+                  <Skeleton className="h-2.5 w-20" />
+                </div>
+              </div>
+            </div>
+            <div className="bg-[#1e293b]/60 backdrop-blur-xl border border-white/10 rounded-2xl p-4 space-y-2">
+              <Skeleton className="h-3 w-16" />
+              <Skeleton className="h-16 w-full" />
+            </div>
+          </div>
+          <div className="md:col-span-3">
+            <div className="bg-[#1e293b]/60 backdrop-blur-xl border border-white/10 rounded-2xl p-4 space-y-4">
+              <Skeleton className="h-3 w-28" />
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-12 w-full rounded-xl" />
+              <Skeleton className="h-12 w-full rounded-xl" />
+            </div>
+          </div>
         </div>
       </div>
     </div>
   );
 
+  /* Not found */
   if (!product) return (
-    <div className="text-center py-20">
-      <p className="text-5xl mb-3">😕</p>
-      <p className="text-lg font-bold text-white">Produk tidak ditemukan</p>
-      <Link to="/produk" className="text-blue-400 text-sm mt-2 inline-block hover:text-blue-300 transition-colors">← Kembali ke Marketplace</Link>
+    <div className="min-h-screen bg-[#0f172a] flex flex-col items-center justify-center gap-3">
+      <AlertCircle size={40} className="text-[#94a3b8]" />
+      <p className="text-[15px] font-semibold text-[#f8fafc]">Produk tidak ditemukan</p>
+      <Link to="/produk" className="text-[#3b82f6] text-[13px] hover:underline font-medium">Kembali ke Marketplace</Link>
     </div>
   );
 
-  const theme = getTheme(product.game_name);
   const specs = (product.specs || '').split('|').filter(Boolean);
 
   return (
-    <div className="space-y-6">
-      {/* Breadcrumb */}
-      <div className="flex items-center gap-2 text-sm text-[#64748b]">
-        <button onClick={() => navigate(-1)} className="hover:text-blue-400 flex items-center gap-1 transition-colors">
-          <ChevronLeft size={16} /> Kembali
+    <div className="min-h-screen bg-[#0f172a] pb-8">
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+
+      {/* Header */}
+      <div className="bg-[#1e293b]/80 backdrop-blur-lg border-b border-[#475569] px-4 py-3 flex items-center gap-3 sticky top-0 z-10">
+        <button onClick={() => navigate(-1)} className="p-1.5 hover:bg-[#334155] rounded-lg transition-colors">
+          <ChevronLeft size={18} className="text-[#f8fafc]" />
         </button>
-        <span>/</span>
-        <Link to="/produk" className="hover:text-blue-400 transition-colors">Marketplace</Link>
-        <span>/</span>
-        <span className="text-[#94a3b8]">{product.game_name}</span>
-        <span className="hidden md:inline">/</span>
-        <span className="hidden md:inline text-[#475569] truncate max-w-[200px]">{product.title}</span>
+        <span className="font-semibold text-[15px] text-[#f8fafc] truncate">{product.title}</span>
       </div>
 
-      <div className="grid md:grid-cols-12 gap-6">
-        {/* Thumb */}
-        <div className="md:col-span-5">
-          <div className={`relative aspect-[4/3] rounded-2xl flex items-center justify-center overflow-hidden shadow-xl shadow-black/30`}
-               style={(() => {
-                 const map = {'Mobile Legends':'/games/ml.jpg','Genshin Impact':'/games/genshin.jpg','Free Fire':'/games/ff.jpg','Valorant':'/games/valorant.jpg'};
-                 const img = map[product.game_name];
-                 return img ? {backgroundImage: `url(${img})`, backgroundSize: 'cover', backgroundPosition: 'center'} : {};
-               })()}>
-            <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
-            <span className="absolute bottom-4 left-4 text-xs font-bold text-white/90 bg-black/50 backdrop-blur-sm px-3 py-1.5 rounded-lg">
-              {CATEGORY_MAP[product.category] || product.category}
-            </span>
-            <div className="absolute top-4 right-4 flex gap-2">
-              <button onClick={() => setLiked(!liked)}
-                className={`p-2.5 rounded-xl backdrop-blur-sm transition-all ${
-                  liked ? 'bg-red-500/80 text-white shadow-lg' : 'bg-black/40 text-white/70 hover:bg-black/60'
-                }`}>
-                <Heart size={18} fill={liked ? 'currentColor' : 'none'} />
-              </button>
-              <button className="p-2.5 rounded-xl bg-black/40 text-white/70 hover:bg-black/60 backdrop-blur-sm transition-all">
-                <Share2 size={18} />
-              </button>
-            </div>
-          </div>
+      <div className="max-w-5xl mx-auto px-4 py-5 space-y-4">
+        {/* Breadcrumb */}
+        <div className="flex items-center gap-1.5 text-[12px] text-[#94a3b8] overflow-x-auto">
+          <button onClick={() => navigate(-1)} className="hover:text-[#f8fafc] flex items-center gap-1 transition-colors shrink-0">
+            <ChevronLeft size={12} /> Kembali
+          </button>
+          <span className="shrink-0 text-[#475569]">/</span>
+          <Link to="/produk" className="hover:text-[#f8fafc] transition-colors shrink-0">Marketplace</Link>
+          <span className="shrink-0 text-[#475569]">/</span>
+          <span className="text-[#94a3b8] shrink-0">{product.game_name}</span>
         </div>
 
-        {/* Info */}
-        <div className="md:col-span-4 space-y-4">
-          <div className="bg-[#111827] border border-[#1e293b] rounded-2xl p-6">
-            <p className="text-xs font-bold text-blue-400 uppercase tracking-widest mb-1">{product.game_name}</p>
-            <h1 className="text-xl font-black text-white leading-tight">{product.title}</h1>
-            <div className="flex items-center gap-3 mt-4">
-              <span className="text-3xl font-black gradient-text">Rp{product.price?.toLocaleString('id-ID')}</span>
-              {product.sold_count > 10 && (
-                <span className="text-[11px] font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2.5 py-1 rounded-lg">🔥 Best Seller</span>
+        <div className="grid md:grid-cols-12 gap-4">
+          {/* Image */}
+          <div className="md:col-span-5">
+            <div className="relative aspect-[4/3] rounded-2xl overflow-hidden bg-[#1e293b]/60 backdrop-blur-xl border border-white/10"
+              style={(() => {
+                const map = { 'Mobile Legends': '/games/ml.jpg', 'Genshin Impact': '/games/genshin.jpg', 'Free Fire': '/games/ff.jpg', 'Valorant': '/games/valorant.jpg' };
+                const img = map[product.game_name];
+                return img ? { backgroundImage: `url(${img})`, backgroundSize: 'cover', backgroundPosition: 'center' } : {};
+              })()}>
+              {!(() => { const map = { 'Mobile Legends': 1, 'Genshin Impact': 1, 'Free Fire': 1, 'Valorant': 1 }; return map[product.game_name]; })() && (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <Gamepad2 size={48} className="text-[#475569]" />
+                </div>
               )}
-            </div>
-            <div className="flex items-center gap-4 mt-3 text-sm text-[#64748b]">
-              <span className="flex items-center gap-1"><Star size={14} className="text-amber-400 fill-amber-400" /> {product.rating}</span>
-              <span>{product.sold_count} terjual</span>
-              <span className="flex items-center gap-1"><Package size={14} /> Stok: {product.stock}</span>
+              <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent" />
+              <span className="absolute bottom-3 left-3 text-[11px] font-medium text-white bg-[#3b82f6]/80 backdrop-blur-md px-2.5 py-1 rounded-lg z-10 border border-[#3b82f6]/30">
+                {CATEGORY_MAP[product.category] || product.category}
+              </span>
+              <div className="absolute top-3 right-3 flex gap-2 z-10">
+                <button onClick={() => { setLiked(!liked); if (!liked) setToast({ message: 'Ditambahkan ke favorit', type: 'success' }); }}
+                  className={`p-2 rounded-xl backdrop-blur-md transition-all ${
+                    liked ? 'bg-[#3b82f6] text-white shadow-lg' : 'bg-white/10 text-white hover:bg-white/20'
+                  }`}>
+                  <Heart size={16} fill={liked ? 'currentColor' : 'none'} />
+                </button>
+                <button onClick={handleShare}
+                  className="p-2 rounded-xl bg-white/10 text-white hover:bg-white/20 backdrop-blur-md transition-all">
+                  <Share2 size={16} />
+                </button>
+              </div>
             </div>
           </div>
 
-          {/* Seller */}
-          <div className="bg-[#111827] border border-[#1e293b] rounded-2xl p-6">
-            <h3 className="text-xs font-bold text-[#64748b] uppercase tracking-widest mb-4">Penjual</h3>
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center text-white font-bold text-lg shadow-lg">
-                {product.seller_name?.charAt(0)?.toUpperCase() || 'S'}
+          {/* Info */}
+          <div className="md:col-span-4 space-y-3">
+            {/* Product info */}
+            <div className="bg-[#1e293b]/60 backdrop-blur-xl border border-white/10 rounded-2xl p-4">
+              <p className="text-[11px] font-semibold text-[#94a3b8] uppercase tracking-widest mb-1">{product.game_name}</p>
+              <h1 className="text-lg font-bold text-[#f8fafc] leading-snug">{product.title}</h1>
+              <div className="flex items-center gap-3 mt-3">
+                <span className="text-2xl font-bold text-[#f8fafc]">Rp{product.price?.toLocaleString('id-ID')}</span>
+                {product.sold_count > 10 && (
+                  <span className="text-[10px] font-semibold text-white bg-[#3b82f6]/20 border border-[#3b82f6]/30 px-2 py-0.5 rounded-lg">Best Seller</span>
+                )}
               </div>
-              <div>
-                <p className="font-semibold text-white">{product.seller_name || 'Seller'}</p>
-                <div className="flex items-center gap-2 text-xs text-[#64748b] mt-0.5">
-                  <Star size={11} className="text-amber-400 fill-amber-400" /> 5.0
-                  <span className="text-[#475569]">•</span>
-                  <span>Terverifikasi</span>
+              <div className="flex items-center gap-3 mt-2.5 text-[12px] text-[#94a3b8]">
+                <span className="flex items-center gap-1"><Star size={12} className="text-[#3b82f6] fill-[#3b82f6]" /> {product.rating}</span>
+                <span className="text-[#475569]">|</span>
+                <span>{product.sold_count} terjual</span>
+                <span className="text-[#475569]">|</span>
+                <span className="flex items-center gap-1"><Package size={12} /> Stok: {product.stock}</span>
+              </div>
+            </div>
+
+            {/* Seller */}
+            <div className="bg-[#1e293b]/60 backdrop-blur-xl border border-white/10 rounded-2xl p-4">
+              <p className="text-[11px] font-semibold text-[#94a3b8] uppercase tracking-widest mb-3">Penjual</p>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-[#334155] rounded-full flex items-center justify-center text-[#f8fafc] font-semibold text-[14px]">
+                  {product.seller_name?.charAt(0)?.toUpperCase() || <User size={18} />}
                 </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Deskripsi */}
-          <div className="bg-[#111827] border border-[#1e293b] rounded-2xl p-6">
-            <h3 className="text-xs font-bold text-[#64748b] uppercase tracking-widest mb-3">Deskripsi</h3>
-            <p className="text-sm text-[#cbd5e1] leading-relaxed whitespace-pre-wrap">
-              {product.description || 'Tidak ada deskripsi.'}
-            </p>
-          </div>
-        </div>
-
-        {/* Sidebar */}
-        <div className="md:col-span-3">
-          <div className="bg-[#111827] border border-[#1e293b] rounded-2xl p-6 sticky top-24 space-y-5 shadow-xl shadow-black/20">
-            <h3 className="text-xs font-bold text-[#64748b] uppercase tracking-widest">Detail Pembelian</h3>
-            <div className="space-y-3">
-              <div className="flex justify-between text-sm">
-                <span className="text-[#64748b]">Harga</span>
-                <span className="font-semibold text-white">Rp{product.price?.toLocaleString('id-ID')}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-[#64748b]">Rekber (5%)</span>
-                <span className="font-semibold text-white">Rp{Math.round(product.price * 0.05).toLocaleString('id-ID')}</span>
-              </div>
-              <div className="border-t border-[#1e293b] pt-3 flex justify-between items-center">
-                <span className="font-bold text-white">Total</span>
-                <span className="font-black text-xl gradient-text">Rp{Math.round(product.price * 1.05).toLocaleString('id-ID')}</span>
-              </div>
-            </div>
-
-            <button className="w-full bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white font-bold py-3.5 rounded-xl transition-all shadow-lg shadow-blue-500/20 text-sm">
-              🛒 Beli (Rekber)
-            </button>
-            <button className="w-full bg-[#1e293b] hover:bg-[#263142] text-[#94a3b8] hover:text-white font-bold py-3.5 rounded-xl transition-all text-sm flex items-center justify-center gap-2">
-              <MessageCircle size={16} /> Chat Seller
-            </button>
-
-            <div className="flex items-start gap-3 text-xs bg-blue-500/5 border border-blue-500/10 p-3.5 rounded-xl">
-              <ShieldCheck size={18} className="text-blue-400 shrink-0 mt-0.5" />
-              <div>
-                <p className="font-bold text-blue-300">Transaksi Aman</p>
-                <p className="text-[#64748b] mt-0.5">Dana ditahan sampai barang diterima</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Spesifikasi */}
-      {specs.length > 0 && (
-        <div className="bg-[#111827] border border-[#1e293b] rounded-2xl p-6">
-          <h3 className="text-xs font-bold text-[#64748b] uppercase tracking-widest mb-4">Spesifikasi</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {specs.map((s, i) => {
-              const [key, val] = s.split(':').map(x => x.trim());
-              return (
-                <div key={i} className="flex items-center gap-3 bg-[#0a0e17] border border-[#1e293b]/50 rounded-xl p-3.5">
-                  <div className="w-8 h-8 bg-blue-500/10 rounded-lg flex items-center justify-center shrink-0">
-                    <Tag size={14} className="text-blue-400" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-[10px] font-bold text-[#64748b] uppercase tracking-wider">{key}</p>
-                    <p className="text-sm font-semibold text-white truncate">{val}</p>
+                <div>
+                  <p className="font-semibold text-[14px] text-[#f8fafc]">{product.seller_name || 'Seller'}</p>
+                  <div className="flex items-center gap-2 text-[11px] text-[#94a3b8] mt-0.5">
+                    <Star size={10} className="text-[#3b82f6] fill-[#3b82f6]" /> 5.0
+                    <span className="text-[#475569]">|</span>
+                    <span>Terverifikasi</span>
                   </div>
                 </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Ulasan */}
-      <div className="bg-[#111827] border border-[#1e293b] rounded-2xl p-6">
-        <h3 className="text-xs font-bold text-[#64748b] uppercase tracking-widest mb-4">Ulasan</h3>
-        <div className="space-y-4">
-          {[
-            { name: 'GamerSejati', rating: 5, text: 'Akun sesuai deskripsi, seller fast response. Recommended!', time: '2 hari lalu' },
-            { name: 'ProPlayerID', rating: 5, text: 'Proses cepat, barang sesuai. Makasih seller!', time: '5 hari lalu' },
-            { name: 'RookieGamer', rating: 4, text: 'Bagus, sesuai ekspektasi. Overall puas.', time: '1 minggu lalu' },
-          ].map((r, i) => (
-            <div key={i} className="flex gap-3 pb-4 border-b border-[#1e293b]/50 last:border-0 last:pb-0">
-              <div className="w-9 h-9 bg-gradient-to-br from-blue-400 to-purple-500 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0">
-                {r.name.charAt(0)}
-              </div>
-              <div className="min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-sm font-semibold text-white">{r.name}</span>
-                  <div className="flex">{[...Array(5)].map((_, j) => <Star key={j} size={11} className={j < r.rating ? 'text-amber-400 fill-amber-400' : 'text-[#475569]'} />)}</div>
-                  <span className="text-xs text-[#475569]">{r.time}</span>
-                </div>
-                <p className="text-sm text-[#94a3b8] mt-1">{r.text}</p>
               </div>
             </div>
-          ))}
+
+            {/* Description */}
+            <div className="bg-[#1e293b]/60 backdrop-blur-xl border border-white/10 rounded-2xl p-4">
+              <p className="text-[11px] font-semibold text-[#94a3b8] uppercase tracking-widest mb-2">Deskripsi</p>
+              <p className="text-[13px] text-[#94a3b8] leading-relaxed whitespace-pre-wrap">
+                {product.description || 'Tidak ada deskripsi.'}
+              </p>
+            </div>
+          </div>
+
+          {/* Sidebar Purchase */}
+          <div className="md:col-span-3">
+            <div className="bg-[#1e293b]/60 backdrop-blur-xl border border-white/10 rounded-2xl p-4 sticky top-20 space-y-4">
+              <p className="text-[11px] font-semibold text-[#94a3b8] uppercase tracking-widest">Detail Pembelian</p>
+              <div className="space-y-2.5">
+                <div className="flex justify-between text-[13px]">
+                  <span className="text-[#94a3b8]">Harga</span>
+                  <span className="font-medium text-[#f8fafc]">Rp{product.price?.toLocaleString('id-ID')}</span>
+                </div>
+                <div className="flex justify-between text-[13px]">
+                  <span className="text-[#94a3b8]">Fee Rekber (2.5%)</span>
+                  <span className="font-medium text-[#f8fafc]">Rp{Math.max(Math.round(product.price * 0.025), 2000).toLocaleString('id-ID')}</span>
+                </div>
+                <div className="border-t border-[#475569] pt-2.5 flex justify-between items-center">
+                  <span className="font-semibold text-[14px] text-[#f8fafc]">Total</span>
+                  <span className="font-bold text-lg text-[#f8fafc]">
+                    Rp{(product.price + Math.max(Math.round(product.price * 0.025), 2000)).toLocaleString('id-ID')}
+                  </span>
+                </div>
+              </div>
+
+              <button onClick={handleBuy}
+                className="w-full bg-[#3b82f6] hover:bg-[#2563eb] text-white font-semibold py-3 rounded-xl transition-all text-[14px] flex items-center justify-center gap-2">
+                Beli Sekarang <ArrowRight size={16} />
+              </button>
+              <button className="w-full bg-[#334155] hover:bg-[#475569] text-[#f8fafc] font-semibold py-3 rounded-xl transition-all text-[13px] flex items-center justify-center gap-2 border border-[#475569]">
+                <MessageCircle size={15} /> Chat Seller
+              </button>
+
+              <div className="flex items-start gap-2.5 text-[12px] bg-[#334155] border border-[#475569] p-3 rounded-xl">
+                <ShieldCheck size={16} className="text-[#3b82f6] shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-semibold text-[#f8fafc]">Transaksi Aman</p>
+                  <p className="text-[#94a3b8] mt-0.5">Dana ditahan sampai barang diterima</p>
+                </div>
+              </div>
+
+              {/* Trust badges */}
+              <div className="grid grid-cols-2 gap-2">
+                <div className="flex flex-col items-center p-2.5 bg-[#334155] rounded-xl border border-[#475569]">
+                  <Truck size={16} className="text-[#3b82f6] mb-1" />
+                  <span className="text-[10px] text-[#94a3b8] font-medium">Kirim Cepat</span>
+                </div>
+                <div className="flex flex-col items-center p-2.5 bg-[#334155] rounded-xl border border-[#475569]">
+                  <Clock size={16} className="text-[#3b82f6] mb-1" />
+                  <span className="text-[10px] text-[#94a3b8] font-medium">Respon 1 Jam</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Specs */}
+        {specs.length > 0 && (
+          <div className="bg-[#1e293b]/60 backdrop-blur-xl border border-white/10 rounded-2xl p-4">
+            <p className="text-[11px] font-semibold text-[#94a3b8] uppercase tracking-widest mb-3">Spesifikasi</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {specs.map((s, i) => {
+                const [key, val] = s.split(':').map(x => x.trim());
+                return (
+                  <div key={i} className="flex items-center gap-3 bg-[#334155] border border-[#475569] rounded-xl p-3">
+                    <div className="w-8 h-8 bg-[#0f172a] rounded-lg flex items-center justify-center shrink-0">
+                      <Tag size={14} className="text-[#3b82f6]" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-semibold text-[#94a3b8] uppercase tracking-wider">{key}</p>
+                      <p className="text-[13px] font-medium text-[#f8fafc] truncate">{val}</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Reviews */}
+        <div className="bg-[#1e293b]/60 backdrop-blur-xl border border-white/10 rounded-2xl p-4">
+          <p className="text-[11px] font-semibold text-[#94a3b8] uppercase tracking-widest mb-3">Ulasan</p>
+          <div className="space-y-3">
+            {[
+              { name: 'GamerSejati', rating: 5, text: 'Akun sesuai deskripsi, seller fast response. Recommended!', time: '2 hari lalu' },
+              { name: 'ProPlayerID', rating: 5, text: 'Proses cepat, barang sesuai. Makasih seller!', time: '5 hari lalu' },
+              { name: 'RookieGamer', rating: 4, text: 'Bagus, sesuai ekspektasi. Overall puas.', time: '1 minggu lalu' },
+            ].map((r, i) => (
+              <div key={i} className="flex gap-3 pb-3 border-b border-[#475569] last:border-0 last:pb-0">
+                <div className="w-8 h-8 bg-[#334155] rounded-full flex items-center justify-center text-[11px] font-semibold text-[#f8fafc] shrink-0">
+                  {r.name.charAt(0)}
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[13px] font-semibold text-[#f8fafc]">{r.name}</span>
+                    <div className="flex">{[...Array(5)].map((_, j) => <Star key={j} size={10} className={j < r.rating ? 'text-[#3b82f6] fill-[#3b82f6]' : 'text-[#475569]'} />)}</div>
+                    <span className="text-[11px] text-[#94a3b8]">{r.time}</span>
+                  </div>
+                  <p className="text-[13px] text-[#94a3b8] mt-0.5">{r.text}</p>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </div>
