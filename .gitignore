@@ -1,38 +1,10 @@
-# Dependencies
 node_modules/
-package-lock.json
-
-# Environment
-.env
-.env.local
-.env.*.local
-
-# Database
 *.sqlite
-*.sqlite-journal
-database.sqlite
-
-# Logs
-logs/
-*.log
-npm-debug.log*
-
-# OS
-.DS_Store
-Thumbs.db
-
-# IDE
-.idea/
-.vscode/
-*.swp
-*.swo
-
-# Build output
+*.sqlite-shm
+*.sqlite-wal
+.env
 dist/
-build/
-
-# Temp
+uploads/
+*.log
 tmp/
-temp/
-*.tmp
-node_modules/
+.DS_Store
