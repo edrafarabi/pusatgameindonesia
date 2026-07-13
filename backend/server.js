@@ -457,51 +457,59 @@ app.post('/api/transaction/create', authenticateToken, (req, res) => {
         const transactionId = `TRX-${Date.now()}`;
         const amount = product.price;
 
-        // Hitung fee dari settings (dibayar buyer)
-        db.get("SELECT value FROM settings WHERE key = 'rekber_fee_percent'", [], (errF, feeRow) => {
-            db.get("SELECT value FROM settings WHERE key = 'minimum_fee'", [], (errM, minRow) => {
-                const feePercent = feeRow ? parseFloat(feeRow.value) : 2.5;
-                const minFee = minRow ? parseInt(minRow.value) : 2000;
-                const rawFee = Math.round(amount * feePercent / 100);
-                const platformFee = Math.max(rawFee, minFee);
+        // Reserve stok terlebih dahulu secara atomik untuk mencegah race condition (TOCTOU)
+        db.run('UPDATE products SET stock = stock - 1 WHERE id = ? AND stock > 0', [product_id], function(errReserve) {
+            if (errReserve || this.changes === 0) {
+                return res.status(400).json({ error: 'Stok habis atau produk tidak tersedia' });
+            }
 
-                db.run(
-                    `INSERT INTO transactions (id, product_id, type, buyer_id, seller_id, amount, status, platform_fee, buyer_info) 
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                    [transactionId, product_id, 'REKBER', req.user.id, product.seller_id, amount, 'WAITING_PAYMENT', platformFee, buyer_info || ''],
-                    function(err) {
-                        if (err) return res.status(500).json({ error: 'Gagal membuat transaksi' });
-                        
-                        // Reserve stok sekali; hanya jika stok > 0
-                        db.run('UPDATE products SET stock = stock - 1 WHERE id = ? AND stock > 0', [product_id]);
-                
-                // Buat group chat otomatis
-                createRekberGroup(transactionId, req.user.id, product.seller_id, admin_id, (err2, groupId) => {
-                    if (err2) console.error('Gagal buat group:', err2);
+            // Hitung fee dari settings (dibayar buyer)
+            db.get("SELECT value FROM settings WHERE key = 'rekber_fee_percent'", [], (errF, feeRow) => {
+                db.get("SELECT value FROM settings WHERE key = 'minimum_fee'", [], (errM, minRow) => {
+                    const feePercent = feeRow ? parseFloat(feeRow.value) : 2.5;
+                    const minFee = minRow ? parseInt(minRow.value) : 2000;
+                    const rawFee = Math.round(amount * feePercent / 100);
+                    const platformFee = Math.max(rawFee, minFee);
+
+                    db.run(
+                        `INSERT INTO transactions (id, product_id, type, buyer_id, seller_id, amount, status, platform_fee, buyer_info)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                        [transactionId, product_id, 'REKBER', req.user.id, product.seller_id, amount, 'WAITING_PAYMENT', platformFee, buyer_info || ''],
+                        function(err) {
+                            if (err) {
+                                // Revert stok jika gagal
+                                db.run('UPDATE products SET stock = stock + 1 WHERE id = ?', [product_id]);
+                                return res.status(500).json({ error: 'Gagal membuat transaksi' });
+                            }
                     
-                    // Kirim notif Telegram ke admin
-                    db.get('SELECT * FROM users WHERE id = ?', [req.user.id], (errU, buyer) => {
-                        if (buyer) {
-                            notifyNewTransaction(
-                                { id: transactionId, amount, status: 'WAITING_PAYMENT' },
-                                buyer,
-                                product
-                            ).catch(e => console.error('Notif error:', e.message));
-                        }
+                    // Buat group chat otomatis
+                    createRekberGroup(transactionId, req.user.id, product.seller_id, admin_id, (err2, groupId) => {
+                        if (err2) console.error('Gagal buat group:', err2);
+
+                        // Kirim notif Telegram ke admin
+                        db.get('SELECT * FROM users WHERE id = ?', [req.user.id], (errU, buyer) => {
+                            if (buyer) {
+                                notifyNewTransaction(
+                                    { id: transactionId, amount, status: 'WAITING_PAYMENT' },
+                                    buyer,
+                                    product
+                                ).catch(e => console.error('Notif error:', e.message));
+                            }
+                        });
+
+                        res.json({
+                            id: transactionId,
+                            amount,
+                            platform_fee: platformFee,
+                            total: amount + platformFee,
+                            group_id: groupId,
+                            message: 'Transaksi dibuat. Group rekber sudah dibuat dengan admin.'
+                        });
                     });
-                    
-                    res.json({ 
-                        id: transactionId, 
-                        amount,
-                        platform_fee: platformFee,
-                        total: amount + platformFee,
-                        group_id: groupId,
-                        message: 'Transaksi dibuat. Group rekber sudah dibuat dengan admin.' 
-                    });
-                });
-            }); // close db.run transactions
-            }); // close db.get minimum_fee
-        }); // close db.get rekber_fee_percent
+                }); // close db.run transactions
+                }); // close db.get minimum_fee
+            }); // close db.get rekber_fee_percent
+        }); // close db.run reserve stock
     }); // close db.get products
 }); // close app.post
 
@@ -511,13 +519,12 @@ app.put('/api/transaction/:id/pay', authenticateToken, (req, res) => {
     
     db.get('SELECT * FROM transactions WHERE id = ? AND buyer_id = ?', [req.params.id, req.user.id], (err, trx) => {
         if (err || !trx) return res.status(404).json({ error: 'Transaksi tidak ditemukan' });
-        if (trx.status !== 'WAITING_PAYMENT') return res.status(400).json({ error: 'Transaksi sudah diproses' });
 
         db.run(
-            `UPDATE transactions SET status = 'PAID', payment_method = ?, payment_proof = ?, paid_at = CURRENT_TIMESTAMP WHERE id = ?`,
+            `UPDATE transactions SET status = 'PAID', payment_method = ?, payment_proof = ?, paid_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'WAITING_PAYMENT'`,
             [payment_method || '', payment_proof || '', req.params.id],
             function(err2) {
-                if (err2) return res.status(500).json({ error: 'Gagal update pembayaran' });
+                if (err2 || this.changes === 0) return res.status(400).json({ error: 'Transaksi sudah diproses atau gagal update pembayaran' });
                 
                 // Notifikasi ke group chat
                 notifyGroupChat(req.params.id, `💰 BUYER TELAH BAYAR! Metode: ${payment_method || 'Transfer Bank'}. Menunggu seller kirim akun.`);
@@ -534,13 +541,12 @@ app.put('/api/seller/orders/:id/deliver', authenticateToken, (req, res) => {
     
     db.get('SELECT * FROM transactions WHERE id = ? AND seller_id = ?', [req.params.id, req.user.id], (err, trx) => {
         if (err || !trx) return res.status(404).json({ error: 'Transaksi tidak ditemukan' });
-        if (trx.status !== 'PAID') return res.status(400).json({ error: 'Pembayaran belum diterima' });
 
         db.run(
-            `UPDATE transactions SET status = 'DELIVERED', delivered_at = CURRENT_TIMESTAMP WHERE id = ?`,
+            `UPDATE transactions SET status = 'DELIVERED', delivered_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'PAID'`,
             [req.params.id],
             function(err2) {
-                if (err2) return res.status(500).json({ error: 'Gagal update status' });
+                if (err2 || this.changes === 0) return res.status(400).json({ error: 'Pembayaran belum diterima atau gagal update status' });
                 notifyGroupChat(req.params.id, "📦 SELLER TELAH KIRIM AKUN! Silakan buyer cek dan verifikasi akun.");
                 res.json({ message: 'Akun berhasil dikirim. Menunggu buyer konfirmasi.' });
             }
@@ -552,16 +558,15 @@ app.put('/api/seller/orders/:id/deliver', authenticateToken, (req, res) => {
 app.put('/api/transaction/:id/confirm', authenticateToken, (req, res) => {
     db.get('SELECT * FROM transactions WHERE id = ? AND buyer_id = ?', [req.params.id, req.user.id], (err, trx) => {
         if (err || !trx) return res.status(404).json({ error: 'Transaksi tidak ditemukan' });
-        if (trx.status !== 'DELIVERED') return res.status(400).json({ error: 'Akun belum dikirim seller' });
 
         // Fee dibayar buyer, seller terima 100%
         const sellerGets = trx.amount;
 
         db.run(
-            `UPDATE transactions SET status = 'COMPLETED', completed_at = CURRENT_TIMESTAMP, escrow_released = 1, platform_fee = ?, seller_amount = ? WHERE id = ?`,
+            `UPDATE transactions SET status = 'COMPLETED', completed_at = CURRENT_TIMESTAMP, escrow_released = 1, platform_fee = ?, seller_amount = ? WHERE id = ? AND status = 'DELIVERED'`,
             [trx.platform_fee || 0, sellerGets, req.params.id],
             function(err2) {
-                if (err2) return res.status(500).json({ error: 'Gagal konfirmasi' });
+                if (err2 || this.changes === 0) return res.status(400).json({ error: 'Akun belum dikirim seller atau gagal konfirmasi' });
 
                 // Tambah saldo seller (100% harga, fee dibayar buyer)
                 db.run('UPDATE users SET balance = balance + ?, total_earned = total_earned + ?, total_sales = total_sales + 1 WHERE id = ?', 
@@ -589,13 +594,12 @@ app.put('/api/transaction/:id/dispute', authenticateToken, (req, res) => {
 
     db.get('SELECT * FROM transactions WHERE id = ? AND buyer_id = ?', [req.params.id, req.user.id], (err, trx) => {
         if (err || !trx) return res.status(404).json({ error: 'Transaksi tidak ditemukan' });
-        if (trx.status !== 'DELIVERED') return res.status(400).json({ error: 'Hanya bisa dispute setelah akun dikirim' });
 
         db.run(
-            `UPDATE transactions SET status = 'DISPUTED', dispute_reason = ? WHERE id = ?`,
+            `UPDATE transactions SET status = 'DISPUTED', dispute_reason = ? WHERE id = ? AND status = 'DELIVERED'`,
             [reason, req.params.id],
             function(err2) {
-                if (err2) return res.status(500).json({ error: 'Gagal ajukan dispute' });
+                if (err2 || this.changes === 0) return res.status(400).json({ error: 'Hanya bisa dispute setelah akun dikirim atau gagal ajukan dispute' });
                 res.json({ message: 'Dispute diajukan. Admin akan review.' });
             }
         );
@@ -631,13 +635,12 @@ app.put('/api/transaction/:id/cancel', authenticateToken, (req, res) => {
     
     db.get('SELECT * FROM transactions WHERE id = ? AND buyer_id = ?', [req.params.id, req.user.id], (err, trx) => {
         if (err || !trx) return res.status(404).json({ error: 'Transaksi tidak ditemukan' });
-        if (trx.status !== 'WAITING_PAYMENT') return res.status(400).json({ error: 'Transaksi berbayar harus direfund oleh admin' });
 
         db.run(
-            `UPDATE transactions SET status = 'CANCELLED', cancel_reason = ?, cancelled_at = CURRENT_TIMESTAMP WHERE id = ?`,
+            `UPDATE transactions SET status = 'CANCELLED', cancel_reason = ?, cancelled_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'WAITING_PAYMENT'`,
             [reason || 'Dibatalkan buyer', req.params.id],
             function(err2) {
-                if (err2) return res.status(500).json({ error: 'Gagal cancel' });
+                if (err2 || this.changes === 0) return res.status(400).json({ error: 'Transaksi berbayar harus direfund oleh admin atau gagal cancel' });
                 
                 // Kembalikan stok reservasi
                 db.run('UPDATE products SET stock = stock + 1 WHERE id = ?', [trx.product_id]);
@@ -724,12 +727,10 @@ app.put('/api/seller/orders/:id/status', authenticateToken, (req, res) => {
     
     db.get('SELECT * FROM transactions WHERE id = ? AND seller_id = ?', [req.params.id, req.user.id], (err, trx) => {
         if (err || !trx) return res.status(404).json({ error: 'Transaksi tidak ditemukan' });
-        if (trx.status !== 'PAID') return res.status(400).json({ error: 'Pesanan belum dibayar' });
         
-        db.run('UPDATE transactions SET status = ? WHERE id = ?', [status, req.params.id], function(err2) {
-            if (err2) {
-                console.error('DB update error:', err2.message);
-                return res.status(500).json({ error: 'Gagal update status: ' + err2.message });
+        db.run('UPDATE transactions SET status = ? WHERE id = ? AND status = "PAID"', [status, req.params.id], function(err2) {
+            if (err2 || this.changes === 0) {
+                return res.status(400).json({ error: 'Pesanan belum dibayar atau gagal update status' });
             }
             res.json({ success: true, message: `Status diubah ke ${status}` });
         });
@@ -888,10 +889,10 @@ cron.schedule('*/10 * * * *', () => {
             
             rows.forEach(trx => {
                 db.run(
-                    `UPDATE transactions SET status = 'CANCELLED', cancelled_at = CURRENT_TIMESTAMP, cancel_reason = 'Auto-cancel: tidak bayar dalam 1 jam' WHERE id = ?`,
+                    `UPDATE transactions SET status = 'CANCELLED', cancelled_at = CURRENT_TIMESTAMP, cancel_reason = 'Auto-cancel: tidak bayar dalam 1 jam' WHERE id = ? AND status = 'WAITING_PAYMENT'`,
                     [trx.id],
-                    (err2) => {
-                        if (!err2) {
+                    function(err2) {
+                        if (!err2 && this.changes > 0) {
                             // Kembalikan stok produk
                             db.run('UPDATE products SET stock = stock + 1 WHERE id = ?', [trx.product_id]);
                             console.log(`⏰ Auto-cancelled transaction: ${trx.id}`);
@@ -928,40 +929,35 @@ app.post('/api/transaction/:id/release', authenticateToken, (req, res) => {
         db.get('SELECT * FROM transactions WHERE id = ?', [trxId], (err2, trx) => {
             if (err2 || !trx) return res.status(404).json({ error: 'Transaksi tidak ditemukan' });
             
-            if (trx.status !== 'COMPLETED') {
-                return res.status(400).json({ error: 'Transaksi belum COMPLETED. Tidak bisa cairkan.' });
-            }
-            
-            if (trx.escrow_released) {
-                return res.status(400).json({ error: 'Dana sudah dicairkan sebelumnya' });
-            }
-            
             // Hitung fee dan seller amount
             db.get("SELECT value FROM settings WHERE key = 'rekber_fee_percent'", [], (err3, feeRow) => {
                 const feePercent = feeRow ? parseFloat(feeRow.value) : 5;
                 const platformFee = Math.round(trx.amount * feePercent / 100);
                 const sellerAmount = trx.amount - platformFee;
                 
-                db.serialize(() => {
-                    // Update transaksi
-                    db.run(
-                        'UPDATE transactions SET escrow_released = 1, platform_fee = ?, seller_amount = ? WHERE id = ?',
-                        [platformFee, sellerAmount, trxId]
-                    );
-                    
-                    // Tambah saldo seller
-                    db.run('UPDATE users SET balance = balance + ? WHERE id = ?', [sellerAmount, trx.seller_id]);
-                    
-                    // Kirim notif ke group
-                    notifyGroupChat(trxId, `✅ Dana dicairkan ke seller. Rp ${sellerAmount.toLocaleString('id-ID')} (setelah fee ${feePercent}%)`, req.user.id);
-                    
-                    res.json({
-                        message: 'Dana berhasil dicairkan ke seller',
-                        seller_amount: sellerAmount,
-                        platform_fee: platformFee,
-                        fee_percent: feePercent
-                    });
-                });
+                // Update transaksi
+                db.run(
+                    'UPDATE transactions SET escrow_released = 1, platform_fee = ?, seller_amount = ? WHERE id = ? AND status = "COMPLETED" AND escrow_released = 0',
+                    [platformFee, sellerAmount, trxId],
+                    function(errUpdate) {
+                        if (errUpdate || this.changes === 0) {
+                            return res.status(400).json({ error: 'Transaksi belum COMPLETED atau dana sudah dicairkan sebelumnya' });
+                        }
+
+                        // Tambah saldo seller
+                        db.run('UPDATE users SET balance = balance + ? WHERE id = ?', [sellerAmount, trx.seller_id]);
+
+                        // Kirim notif ke group
+                        notifyGroupChat(trxId, `✅ Dana dicairkan ke seller. Rp ${sellerAmount.toLocaleString('id-ID')} (setelah fee ${feePercent}%)`, req.user.id);
+
+                        res.json({
+                            message: 'Dana berhasil dicairkan ke seller',
+                            seller_amount: sellerAmount,
+                            platform_fee: platformFee,
+                            fee_percent: feePercent
+                        });
+                    }
+                );
             });
         });
     });
@@ -981,31 +977,31 @@ app.post('/api/auth/withdraw', authenticateToken, (req, res) => {
         return res.status(400).json({ error: 'Metode, nomor rekening, dan nama pemilik wajib diisi' });
     }
     
-    db.get('SELECT balance FROM users WHERE id = ?', [req.user.id], (err, user) => {
-        if (err || !user) return res.status(404).json({ error: 'User tidak ditemukan' });
-        
-        if (user.balance < amount) {
-            return res.status(400).json({ error: `Saldo tidak cukup. Saldo: Rp ${user.balance.toLocaleString('id-ID')}` });
+    // Kurangi saldo secara atomik
+    db.run('UPDATE users SET balance = balance - ? WHERE id = ? AND balance >= ?', [amount, req.user.id, amount], function(err) {
+        if (err || this.changes === 0) {
+            return res.status(400).json({ error: `Saldo tidak cukup atau terjadi kesalahan.` });
         }
         
-        db.serialize(() => {
-            // Kurangi saldo
-            db.run('UPDATE users SET balance = balance - ? WHERE id = ?', [amount, req.user.id]);
-            
-            // Simpan request withdraw
-            db.run(
-                `INSERT INTO withdraw_requests (user_id, amount, method, account_number, account_name, status)
-                 VALUES (?, ?, ?, ?, ?, 'PENDING')`,
-                [req.user.id, amount, method, account_number, account_name]
-            );
-            
-            res.json({
-                message: 'Request penarikan berhasil dikirim',
-                amount,
-                method,
-                account_number
-            });
-        });
+        // Simpan request withdraw
+        db.run(
+            `INSERT INTO withdraw_requests (user_id, amount, method, account_number, account_name, status)
+             VALUES (?, ?, ?, ?, ?, 'PENDING')`,
+            [req.user.id, amount, method, account_number, account_name],
+            function(err2) {
+                if (err2) {
+                    // Revert saldo
+                    db.run('UPDATE users SET balance = balance + ? WHERE id = ?', [amount, req.user.id]);
+                    return res.status(500).json({ error: 'Gagal membuat request penarikan' });
+                }
+                res.json({
+                    message: 'Request penarikan berhasil dikirim',
+                    amount,
+                    method,
+                    account_number
+                });
+            }
+        );
     });
 });
 
@@ -1050,17 +1046,21 @@ app.put('/api/admin/withdrawals/:id', authenticateToken, (req, res) => {
         
         db.get('SELECT * FROM withdraw_requests WHERE id = ?', [req.params.id], (err2, wr) => {
             if (err2 || !wr) return res.status(404).json({ error: 'Request tidak ditemukan' });
-            if (wr.status !== 'PENDING') return res.status(400).json({ error: 'Request sudah diproses' });
             
-            if (status === 'REJECTED') {
-                // Kembalikan saldo
-                db.run('UPDATE users SET balance = balance + ? WHERE id = ?', [wr.amount, wr.user_id]);
-            }
-            
-            db.run('UPDATE withdraw_requests SET status = ?, processed_at = CURRENT_TIMESTAMP WHERE id = ?',
-                [status, req.params.id]);
-            
-            res.json({ message: `Penarikan ${status === 'APPROVED' ? 'disetujui' : 'ditolak'}` });
+            db.run('UPDATE withdraw_requests SET status = ?, processed_at = CURRENT_TIMESTAMP WHERE id = ? AND status = "PENDING"',
+                [status, req.params.id], function(errUpdate) {
+
+                if (errUpdate || this.changes === 0) {
+                    return res.status(400).json({ error: 'Request sudah diproses' });
+                }
+
+                if (status === 'REJECTED') {
+                    // Kembalikan saldo
+                    db.run('UPDATE users SET balance = balance + ? WHERE id = ?', [wr.amount, wr.user_id]);
+                }
+
+                res.json({ message: `Penarikan ${status === 'APPROVED' ? 'disetujui' : 'ditolak'}` });
+            });
         });
     });
 });
